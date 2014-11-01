@@ -6,11 +6,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
-import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.nio.ByteBuffer;
 
 public class Sender {
 	private static final int MSS = 576;
@@ -21,7 +18,6 @@ public class Sender {
 		String input;
 		int total_bytes;
 		int len = MSS;
-		byte[] data;
 		
 		try {
 			input = stdIn.readLine();
@@ -33,8 +29,8 @@ public class Sender {
 
 			String filename = tokens[1];
 			String remote_IP = tokens[2];
-			int remote_port = Integer.parseInt(tokens[3]);
-			int ack_port_num = Integer.parseInt(tokens[4]);
+			short remote_port = Short.parseShort(tokens[3]);
+			short ack_port_num = Short.parseShort(tokens[4]);
 			String log_filename = tokens[5];
 			
 			int wnd_size;
@@ -56,8 +52,6 @@ public class Sender {
 			byte fileContent[] = new byte[(int)file.length()];
 			
 			fileInput.read(fileContent);
-//			String s = new String(fileContent);
-//			System.out.println("File content: " + s + "\n" + file.length());
 			
 			/* split into packets, add header
 			 * 
@@ -69,68 +63,47 @@ public class Sender {
 			
 			int offset = 0;
 			while (num_pkt > 0) {
-				byte[] bytes;
-				byte[] tmp;
-				int pkt_len;
+				byte[] pkt_bytes;
+				byte[] data;
+				int data_len;
 				
-				pkt_len = (num_pkt == 1) ? (last_pkt_len + 20) : (MSS + 20);
-				bytes = new byte[pkt_len];
+				data_len = (num_pkt == 1) ? (last_pkt_len) : MSS;
+				data = new byte[data_len];
 				
-				Header header = new Header();
-				header.setSrc_port(sndSocket.getPort());
-				header.setDest_port(remote_port);
-				header.setSeq_num(offset);
-				header.setAck_num(offset);
-				header.setHeader_len(20);
-				header.setAck(false);
-				header.setFin(false);
-				header.setRcv_wnd(0);
-				header.setChecksum(0);
+				Packet pkt = new Packet();
+				pkt.setOffset(offset);
+				pkt.setSrc_port((short)sndSocket.getPort());
+				pkt.setDest_port(remote_port);
+				pkt.setSeq_num(offset);
+				pkt.setAck_num(offset);
+				pkt.setAck((short)0);
+				pkt.setFin((short)0);
+				pkt.setChecksum(0);
+				System.arraycopy(fileContent, offset, data, 0, data_len);
+				pkt.setData(data);
 				
-				bytes = prepareBytesFromObj(header);
-				System.out.println(bytes.length);
-//				long checksum = computeChecksum(bytes);
+				data = pkt.getPkt_bytes();
+				System.out.println(data.length);
+				break;
 				
+				
+//				long checksum = computeChecksum(pkt);
+//				
 //				InetAddress rcv_addr = InetAddress.getByAddress(remote_IP.getBytes());
-//				DatagramPacket datagramPkt = new DatagramPacket(bytes, pkt_len, rcv_addr, remote_port);
+//				DatagramPacket datagramPkt = new DatagramPacket(header, pkt_len, rcv_addr, remote_port);
 //				sndSocket.send(datagramPkt);
-				/*
-				//source port
-				tmp = ByteBuffer.allocate(2).putInt(sndSocket.getPort()).array();
-				System.arraycopy(tmp, 0, header, 0, 2);
-				//dest port
-				tmp = ByteBuffer.allocate(2).putInt(remote_port).array();
-				System.arraycopy(tmp, 0, header, 2, 2);
-				//seq num
-				tmp = ByteBuffer.allocate(4).putInt(offset).array();
-				System.arraycopy(tmp, 0, header, 4, 4);
-				//ack num
-				tmp = ByteBuffer.allocate(4).putInt(offset).array();
-				System.arraycopy(tmp, 0, header, 8, 4);
-				//header len + unused (let the whole byte represent header len)
-				tmp = ByteBuffer.allocate(1).putInt(20).array();
-				System.arraycopy(tmp, 0, header, 12, 1);
-				//flag: ack fin (the last 2 bits of this byte is ack and fin)
-				tmp = ByteBuffer.allocate(1).putInt(0).array();
-				System.arraycopy(tmp, 0, header, 13, 1);
-				//rcv wnd
-				tmp = ByteBuffer.allocate(2).putInt(0).array();
-				System.arraycopy(tmp, 0, header, 14, 2);
-				//checksum (last 4 bytes)
-				tmp = ByteBuffer.allocate(4).putInt(0).array();
-				System.arraycopy(tmp, 0, header, 16, 4);
-				//data
-				System.arraycopy(fileContent, offset, header, 20, MSS);
+				
+				
 				
 				//calculate checksum
-				long checksum = computeChecksum(header);
-				tmp = ByteBuffer.allocate(4).putLong(checksum).array();
-				System.arraycopy(tmp, 0, header, 16, 4);
+//				long checksum = computeChecksum(header);
+//				tmp = ByteBuffer.allocate(4).putLong(checksum).array();
+//				System.arraycopy(tmp, 0, header, 16, 4);
+//				
+//				InetAddress rcv_addr = InetAddress.getByAddress(remote_IP.getBytes());
+//				DatagramPacket datagramPkt = new DatagramPacket(header, pkt_len, rcv_addr, remote_port);
+//				sndSocket.send(datagramPkt);
 				
-				InetAddress rcv_addr = InetAddress.getByAddress(remote_IP.getBytes());
-				DatagramPacket datagramPkt = new DatagramPacket(header, pkt_len, rcv_addr, remote_port);
-				sndSocket.send(datagramPkt);
-				*/
 			}
 			
 			
@@ -140,22 +113,22 @@ public class Sender {
 		
 	}
 	
-	private static byte[] prepareBytesFromObj(Header header) throws IOException {
+	private static byte[] prepareBytesFromObj(Packet pkt) throws IOException {
 		ByteArrayOutputStream bos = new ByteArrayOutputStream();
 		ObjectOutput out = null;
+			out = new ObjectOutputStream(bos);   
+			out.writeObject(pkt);
+			byte[] bytes = bos.toByteArray();
 		
-		out = new ObjectOutputStream(bos);   
-		out.writeObject(header);
-		byte[] bytes = bos.toByteArray();
-	
-	    if (out != null)
-	    	out.close();
-	    bos.close();
-	    
-	    return bytes;
-	
+		    if (out != null) {
+		      out.close();
+		    }
+		    bos.close();
+		    
+		    return bytes;
+		    
 	}
-
+	
 	private static long computeChecksum(byte[] buf) {
 		int length = buf.length;
 	    int i = 0;
