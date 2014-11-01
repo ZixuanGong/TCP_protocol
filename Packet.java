@@ -93,13 +93,14 @@ public class Packet {
 	}
 	
 	public void packPkt() {
+		pkt_bytes = new byte[20 + Array.getLength(data)];
 		byte[] tmp;
 		
 		//source port
-		tmp = ByteBuffer.allocate(2).putInt(src_port).array();
+		tmp = ByteBuffer.allocate(2).putShort(src_port).array();
 		System.arraycopy(tmp, 0, pkt_bytes, 0, 2);
 		//dest port
-		tmp = ByteBuffer.allocate(2).putInt(dest_port).array();
+		tmp = ByteBuffer.allocate(2).putShort(dest_port).array();
 		System.arraycopy(tmp, 0, pkt_bytes, 2, 2);
 		//seq num
 		tmp = ByteBuffer.allocate(4).putInt(offset).array();
@@ -108,10 +109,10 @@ public class Packet {
 		tmp = ByteBuffer.allocate(4).putInt(offset).array();
 		System.arraycopy(tmp, 0, pkt_bytes, 8, 4);
 		//flag: ack
-		tmp = ByteBuffer.allocate(2).putInt(ack).array();
+		tmp = ByteBuffer.allocate(2).putShort(ack).array();
 		System.arraycopy(tmp, 0, pkt_bytes, 12, 2);
 		//fin
-		tmp = ByteBuffer.allocate(2).putInt(fin).array();
+		tmp = ByteBuffer.allocate(2).putShort(fin).array();
 		System.arraycopy(tmp, 0, pkt_bytes, 14, 2);
 		//checksum (last 4 bytes)
 		tmp = ByteBuffer.allocate(4).putInt(checksum).array();

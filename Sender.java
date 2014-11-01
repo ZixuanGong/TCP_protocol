@@ -82,6 +82,7 @@ public class Sender {
 				System.arraycopy(fileContent, offset, data, 0, data_len);
 				pkt.setData(data);
 				
+				pkt.packPkt();
 				data = pkt.getPkt_bytes();
 				System.out.println(data.length);
 				break;
