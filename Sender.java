@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
+import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 
 public class Sender {
@@ -46,7 +48,7 @@ public class Sender {
 			 * 
 			 */
 			String project_path = System.getProperty("user.dir");
-			File file = new File(project_path + "/file");
+			File file = new File(project_path + "/" + filename);
 			FileInputStream fileInput = new FileInputStream(file);
 			
 			byte fileContent[] = new byte[(int)file.length()];
@@ -67,44 +69,32 @@ public class Sender {
 				byte[] data;
 				int data_len;
 				
-				data_len = (num_pkt == 1) ? (last_pkt_len) : MSS;
+				data_len = (num_pkt == 1 && last_pkt_len > 0) ? (last_pkt_len) : MSS;
 				data = new byte[data_len];
 				
 				Packet pkt = new Packet();
-				pkt.setOffset(offset);
 				pkt.setSrc_port((short)sndSocket.getPort());
 				pkt.setDest_port(remote_port);
 				pkt.setSeq_num(offset);
 				pkt.setAck_num(offset);
-				pkt.setAck((short)0);
-				pkt.setFin((short)0);
+				pkt.setAck((byte)0);
+				pkt.setFin((byte)0);
 				pkt.setChecksum(0);
 				System.arraycopy(fileContent, offset, data, 0, data_len);
 				pkt.setData(data);
 				
+				pkt.packPkt();				
+				pkt.computeChecksum();
 				pkt.packPkt();
-				data = pkt.getPkt_bytes();
-				System.out.println(data.length);
-				break;
 				
+				pkt_bytes = pkt.getPkt_bytes();
 				
-//				long checksum = computeChecksum(pkt);
-//				
-//				InetAddress rcv_addr = InetAddress.getByAddress(remote_IP.getBytes());
-//				DatagramPacket datagramPkt = new DatagramPacket(header, pkt_len, rcv_addr, remote_port);
-//				sndSocket.send(datagramPkt);
-				
-				
-				
-				//calculate checksum
-//				long checksum = computeChecksum(header);
-//				tmp = ByteBuffer.allocate(4).putLong(checksum).array();
-//				System.arraycopy(tmp, 0, header, 16, 4);
-//				
-//				InetAddress rcv_addr = InetAddress.getByAddress(remote_IP.getBytes());
-//				DatagramPacket datagramPkt = new DatagramPacket(header, pkt_len, rcv_addr, remote_port);
-//				sndSocket.send(datagramPkt);
-				
+				InetAddress rcv_addr = InetAddress.getByName("localhost");
+				DatagramPacket datagramPkt = new DatagramPacket(pkt_bytes, pkt_bytes.length, rcv_addr, remote_port);
+				sndSocket.send(datagramPkt);
+
+				num_pkt--;
+				offset += data_len;
 			}
 			
 			
@@ -128,40 +118,6 @@ public class Sender {
 		    
 		    return bytes;
 		    
-	}
-	
-	private static long computeChecksum(byte[] buf) {
-		int length = buf.length;
-	    int i = 0;
-
-	    long sum = 0;
-	    long data;
-
-	    while (length > 1) {
-	      data = (((buf[i] << 8) & 0xFF00) | ((buf[i + 1]) & 0xFF));
-	      sum += data;
-	      //if longer than 16 bits
-	      if ((sum & 0xFFFF0000) > 0) {
-	        sum = sum & 0xFFFF;
-	        sum += 1;
-	      }
-
-	      i += 2;
-	      length -= 2;
-	    }
-
-	    // last byte
-	    if (length > 0) {
-	      sum += (buf[i] << 8 & 0xFF00);
-	      if ((sum & 0xFFFF0000) > 0) {
-	        sum = sum & 0xFFFF;
-	        sum += 1;
-	      }
-	    }
-
-	    sum = ~sum;
-	    sum = sum & 0xFFFF;
-	    return sum;
 	}
 	
 	public void dbg(String s) {
