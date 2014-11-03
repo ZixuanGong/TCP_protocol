@@ -15,15 +15,14 @@ import java.util.TimerTask;
 
 public class Sender {
 	private static final int MSS = 100;
-	int base = 0;
+	private int base = 0;
+	private Object baseLock = new Object();
 	private HashMap<Integer, Packet> pkts_in_wnd = new HashMap<Integer, Packet>();
 	PrintWriter writer_log;
 	
-	public Sender() throws IOException {
+	public Sender() throws IOException, InterruptedException {
 		BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
 		String input;
-		int total_bytes;
-		int len = MSS;
 		
 		input = stdIn.readLine();
 		String[] tokens = input.split(" ");
@@ -34,6 +33,7 @@ public class Sender {
 
 		String filename = tokens[1];
 		String remote_IP = tokens[2];
+		InetAddress rcv_addr = InetAddress.getByName(remote_IP);
 		short remote_port = Short.parseShort(tokens[3]);
 		short ack_port_num = Short.parseShort(tokens[4]);
 		String log_filename = tokens[5];
@@ -71,42 +71,49 @@ public class Sender {
 			num_pkt++;
 		
 		int seq_num = 0;
-		while (seq_num < base + wnd_size && seq_num < num_pkt) {
-			byte[] data;
-			int data_len;
-			int offset;
+		synchronized(baseLock) {
+			while (seq_num < num_pkt) {
+				while (seq_num < base + wnd_size) {
+					byte[] data;
+					int data_len;
+					int offset;
+					
+					dbg(String.valueOf(base));
+					data_len = (seq_num == num_pkt-1 && last_pkt_len > 0) ? (last_pkt_len) : MSS;
+					data = new byte[data_len];
+					offset = seq_num*MSS;
+					
+					Packet pkt = new Packet();
+					pkt.setSrc_port(sndSocket.getLocalPort());
+					pkt.setDest_port(remote_port);
+					pkt.setSeq_num(seq_num);
+					pkt.setAck_num(seq_num + 1);
+					pkt.setAck((byte)0);
+					pkt.setFin((byte)0);
+					pkt.setChecksum(0);
+					System.arraycopy(fileContent, offset, data, 0, data_len);
+					pkt.setData(data);
+					
+					dbg("data_len=" + String.valueOf(pkt.getData_len()));
+					
+					pkt.packPkt();				
+					pkt.computeChecksum();
+					pkt.updateChecksum();
+		
+					DatagramPacket datagramPkt = new DatagramPacket(pkt.getPkt_bytes(), data_len + 20, rcv_addr, remote_port);
+					//set timestamp
+					Date timestamp = new Date();
+					sndSocket.send(datagramPkt);
+		//			startTimer();
+					
+					pkt.setTimestamp(timestamp);
+					pkts_in_wnd.put(seq_num, pkt);
+					
+					seq_num ++;
+				}
+				baseLock.wait();
+			}
 			
-			data_len = (seq_num == num_pkt-1 && last_pkt_len > 0) ? (last_pkt_len) : MSS;
-			data = new byte[data_len];
-			offset = seq_num*MSS;
-			
-			Packet pkt = new Packet();
-			pkt.setSrc_port(sndSocket.getLocalPort());
-			pkt.setDest_port(remote_port);
-			pkt.setSeq_num(seq_num);
-			pkt.setAck_num(seq_num + 1);
-			pkt.setAck((byte)0);
-			pkt.setFin((byte)0);
-			pkt.setChecksum(0);
-			System.arraycopy(fileContent, offset, data, 0, data_len);
-			pkt.setData(data);
-			
-			pkt.packPkt();				
-			pkt.computeChecksum();
-			pkt.updateChecksum();
-
-			InetAddress rcv_addr = InetAddress.getByName(remote_IP);
-			DatagramPacket datagramPkt = new DatagramPacket(pkt.getPkt_bytes(), data_len + 20, rcv_addr, remote_port);
-			//set timestamp
-//			String timestamp = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss:sss").format(new Date());
-			Date timestamp = new Date();
-			sndSocket.send(datagramPkt);
-//			startTimer();
-			
-			pkt.setTimestamp(timestamp);
-			pkts_in_wnd.put(seq_num, pkt);
-			
-			seq_num ++;
 		}
 		dbg("finish");
 			
@@ -133,6 +140,8 @@ public class Sender {
 			Sender sender = new Sender();
 		} catch (IOException e) {
 			e.printStackTrace();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
 		}
 		
 	}
@@ -151,6 +160,7 @@ public class Sender {
 			while (true) {
 				try {
 					ack = Integer.parseInt(in.readLine());
+					dbg("ack=" + String.valueOf(ack));
 				} catch (NumberFormatException e) {
 					e.printStackTrace();
 				} catch (IOException e) {
@@ -165,8 +175,12 @@ public class Sender {
 				pkt.writeToLog_snd(writer_log);
 				pkts_in_wnd.remove(ack - 1);
 				
-				base = ack;
+				synchronized(baseLock) {
+					base = ack;
+					baseLock.notifyAll();
+				}
 				
+				dbg("base=" + String.valueOf(base));
 			}
 		}
 		

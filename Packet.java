@@ -6,6 +6,8 @@ import java.util.Date;
 
 
 public class Packet {
+	private static final int MSS = 100;
+
 	private int src_port;
 	private int dest_port;
 	private int seq_num;
@@ -134,7 +136,7 @@ public class Packet {
 		tmp = ByteBuffer.allocate(4).putInt(checksum).array();
 		System.arraycopy(tmp, 0, pkt_bytes, 16, 4);
 		//data
-		System.arraycopy(data, 0, pkt_bytes, 20, Array.getLength(data));
+		System.arraycopy(data, 0, pkt_bytes, 20, data_len);
 	}
 
 	public void updateChecksum() {
@@ -150,7 +152,7 @@ public class Packet {
 		
 		System.arraycopy(pkt_bytes, 0, tmp4, 0, 4);
 		buf = ByteBuffer.wrap(tmp4);
-		src_port = buf.getShort();
+		src_port = buf.getInt();
 		
 		System.arraycopy(pkt_bytes, 4, tmp4, 0, 4);
 		buf = ByteBuffer.wrap(tmp4);
@@ -178,6 +180,12 @@ public class Packet {
 		
 		data = new byte[data_len];
 		System.arraycopy(pkt_bytes, 20, data, 0, data_len);
+
+		if (data_len < MSS) {
+			byte[] pkt_bytes_trimmed = new byte[data_len + 20];
+			System.arraycopy(pkt_bytes, 0, pkt_bytes_trimmed, 0, data_len+20);
+			pkt_bytes = pkt_bytes_trimmed;
+		}
 	}
 	
 	public boolean checkCorrupted() {

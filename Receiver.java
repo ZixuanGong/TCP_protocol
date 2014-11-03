@@ -2,6 +2,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.lang.reflect.Array;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.ServerSocket;
@@ -60,14 +61,13 @@ public class Receiver {
 				pkt.setPkt_bytes(pkt_bytes);
 				pkt.unpackPkt();
 				pkt.setTimestamp(timestamp);
+				pkt.setDest_port(listening_port);
+				dbg("after trim, pkt_len=" + Array.getLength(pkt.getPkt_bytes()));
+				dbg("data_len=" + String.valueOf(pkt.getData_len()));
 				
-				dbg(new String(pkt.getData()));
-				dbg(String.valueOf(pkt.getChecksum()));
+//				dbg(new String(pkt.getData()));
 				//checksum check
 				if (pkt.checkCorrupted()) {
-					dbg(String.valueOf(pkt.getChecksum()));
-					pkt.setSrc_port(rcvSock.getPort());
-					pkt.setDest_port(listening_port);
 					pkt.initCorruptedPkt();
 					pkt.writeToLog_rcv(writer_log);
 					
