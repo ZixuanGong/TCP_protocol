@@ -1,21 +1,41 @@
+import java.io.PrintWriter;
 import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
-
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 
 public class Packet {
-	private short src_port;
-	private short dest_port;
+	private int src_port;
+	private int dest_port;
 	private int seq_num;
 	private int ack_num;
 	private byte ack;
 	private byte fin;
 	private int checksum;
 	private boolean corrupted;
+	private Date timestamp;
 	private short data_len;
+	private long rtt;
 	private byte[] data;
 	private byte[] pkt_bytes;
 	
+	
+	public void setDest_port(int port) {
+		dest_port = port;
+	}
+	public long getRtt() {
+		return rtt;
+	}
+	public void setRtt(long rtt) {
+		this.rtt = rtt;
+	}
+	public Date getTimestamp() {
+		return timestamp;
+	}
+	public void setTimestamp(Date timestamp) {
+		this.timestamp = timestamp;
+	}
 	public short getData_len() {
 		return data_len;
 	}
@@ -39,20 +59,12 @@ public class Packet {
 		return corrupted;
 	}
 
-	public short getSrc_port() {
+	public int getSrc_port() {
 		return src_port;
 	}
 
-	public void setSrc_port(short src_port) {
+	public void setSrc_port(int src_port) {
 		this.src_port = src_port;
-	}
-
-	public short getDest_port() {
-		return dest_port;
-	}
-
-	public void setDest_port(short dest_port) {
-		this.dest_port = dest_port;
 	}
 
 	public int getSeq_num() {
@@ -101,11 +113,8 @@ public class Packet {
 		byte[] tmp;
 		
 		//source port
-		tmp = ByteBuffer.allocate(2).putShort(src_port).array();
-		System.arraycopy(tmp, 0, pkt_bytes, 0, 2);
-		//dest port
-		tmp = ByteBuffer.allocate(2).putShort(dest_port).array();
-		System.arraycopy(tmp, 0, pkt_bytes, 2, 2);
+		tmp = ByteBuffer.allocate(4).putInt(src_port).array();
+		System.arraycopy(tmp, 0, pkt_bytes, 0, 4);		
 		//seq num
 		tmp = ByteBuffer.allocate(4).putInt(seq_num).array();
 		System.arraycopy(tmp, 0, pkt_bytes, 4, 4);
@@ -139,13 +148,9 @@ public class Packet {
 		byte[] tmp4 = new byte[4];
 		ByteBuffer buf;
 		
-		System.arraycopy(pkt_bytes, 0, tmp2, 0, 2);
-		buf = ByteBuffer.wrap(tmp2);
+		System.arraycopy(pkt_bytes, 0, tmp4, 0, 4);
+		buf = ByteBuffer.wrap(tmp4);
 		src_port = buf.getShort();
-		
-		System.arraycopy(pkt_bytes, 2, tmp2, 0, 2);
-		buf = ByteBuffer.wrap(tmp2);
-		dest_port = buf.getShort();
 		
 		System.arraycopy(pkt_bytes, 4, tmp4, 0, 4);
 		buf = ByteBuffer.wrap(tmp4);
@@ -175,12 +180,13 @@ public class Packet {
 		System.arraycopy(pkt_bytes, 20, data, 0, data_len);
 	}
 	
-	public void checkCorrupted() {
+	public boolean checkCorrupted() {
 		int checksum_rcvd = checksum;
 		checksum = 0;
-		packPkt();
+		updateChecksum();
 		computeChecksum();
-		corrupted = (checksum != checksum_rcvd) ? true : false;		
+		corrupted = (checksum != checksum_rcvd) ? true : false;
+		return corrupted;
 	}
 	
 	public void computeChecksum() {
@@ -217,4 +223,40 @@ public class Packet {
 		checksum = sum;
 	}
 	
+	public void writeToLog_snd(PrintWriter writer) {
+		//timestamp, source, destination, Sequence #, ACK #, and the flags
+		writer.write(new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss:sss").format(timestamp) + " ");
+		writer.write(src_port + " ");
+		writer.write(dest_port + " ");
+		writer.write(seq_num + " ");
+		writer.write(ack_num + " ");
+		writer.write(ack + " ");
+		writer.write(fin + " ");
+		writer.write(rtt + "\n");
+		writer.flush();
+	}
+	
+	public void writeToLog_rcv(PrintWriter writer) {
+		//timestamp, source, destination, Sequence #, ACK #, and the flags
+		writer.write(new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss:sss").format(timestamp) + " ");
+		writer.write(src_port + " ");
+		writer.write(dest_port + " ");
+		writer.write(seq_num + " ");
+		writer.write(ack_num + " ");
+		writer.write(ack + " ");
+		writer.write(fin + " ");
+		if (corrupted)
+			writer.write("corrupted");
+		else
+			writer.write("uncorrupted");
+		writer.write("\n");
+		writer.flush();
+	}
+	
+	public void initCorruptedPkt() {
+		seq_num = -1;
+		ack_num = -1;
+		ack = (byte) -1;
+		fin = (byte) -1;
+	}
 }
