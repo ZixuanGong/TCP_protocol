@@ -15,10 +15,13 @@ import java.util.TimerTask;
 
 public class Sender {
 	private static final int MSS = 100;
+	private static final long INIT_TIMEOUT = 1000;
 	private int base = 0;
 	private Object baseLock = new Object();
 	private HashMap<Integer, Packet> pkts_in_wnd = new HashMap<Integer, Packet>();
 	PrintWriter writer_log;
+	Timer timer;
+	private volatile int seq_num;
 	
 	public Sender() throws IOException, InterruptedException {
 		BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
@@ -70,7 +73,7 @@ public class Sender {
 		if (last_pkt_len > 0)
 			num_pkt++;
 		
-		int seq_num = 0;
+		seq_num = 0;
 		synchronized(baseLock) {
 			while (seq_num < num_pkt) {
 				while (seq_num < base + wnd_size) {
@@ -104,7 +107,9 @@ public class Sender {
 					//set timestamp
 					Date timestamp = new Date();
 					sndSocket.send(datagramPkt);
-		//			startTimer();
+					//set timer for pkt with the smallest seq_num in the wnd
+					if (seq_num == 0)
+						startTimer(INIT_TIMEOUT);
 					
 					pkt.setTimestamp(timestamp);
 					pkts_in_wnd.put(seq_num, pkt);
@@ -119,20 +124,17 @@ public class Sender {
 			
 	}
 	
-//	private void startTimer() {
-//		Timer timer = new Timer();
-//		timer.schedule(new TimerTask() {
-//			
-//			@Override
-//			public void run() {
-//				long diff = (new Date()).getTime() - users.get(username).getActiveTime().getTime();
-//				if (diff > TIME_OUT * 1000) {
-//					out.println(">>SERVER: Time out, please log in again");
-//					out.println("TIME_OUT");
-//				}	
-//			}
-//		},  TIME_OUT * 1000);
-//	}
+	private void startTimer(long interval) {
+		timer = new Timer();
+		timer.schedule(new TimerTask() {
+			
+			@Override
+			public void run() {
+				//time up, resend all pkts in the wnd
+				seq_num = base;
+			}
+		},  interval);
+	}
 
 	public static void main(String[] args) {
 		
@@ -150,9 +152,14 @@ public class Sender {
 		BufferedReader in;
 		int ack;
 		Packet pkt;
+		long estimatedRTT;
+		long devRTT;
+		long timeout;
 		
 		public ListeningThread(Socket sock) throws IOException {
 			in = new BufferedReader(new InputStreamReader(sock.getInputStream()));		
+			estimatedRTT = 0;
+			devRTT = 0;
 		}
 		
 		@Override
@@ -160,27 +167,46 @@ public class Sender {
 			while (true) {
 				try {
 					ack = Integer.parseInt(in.readLine());
-					dbg("ack=" + String.valueOf(ack));
 				} catch (NumberFormatException e) {
 					e.printStackTrace();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
+				timer.cancel();
+				timer.purge();
+				
 				pkt = pkts_in_wnd.get(ack - 1);
 				
 				Date rcvTime = new Date();
 				long diff = rcvTime.getTime() - pkt.getTimestamp().getTime();
+				//if it's the 1st pkt
+				if (estimatedRTT == 0)
+					estimatedRTT = diff;
+				else
+					estimatedRTT = (long)((1- 0.125)*estimatedRTT + 0.125*diff);
+				
 				pkt.setRtt(diff);
+				
+				//calc timeout interval
+				if (devRTT == 0)
+					devRTT = diff-estimatedRTT;
+				else
+					devRTT = (long)((1-0.25)*devRTT + 0.25*Math.abs(diff-estimatedRTT));
+				
+				timeout = estimatedRTT + 4*devRTT;
 				
 				pkt.writeToLog_snd(writer_log);
 				pkts_in_wnd.remove(ack - 1);
-				
+	
 				synchronized(baseLock) {
 					base = ack;
 					baseLock.notifyAll();
 				}
 				
-				dbg("base=" + String.valueOf(base));
+				//check if there's unack'd pkts in wnd, if so restart timer
+				if (base < seq_num)
+					startTimer(timeout);
+				
 			}
 		}
 		
