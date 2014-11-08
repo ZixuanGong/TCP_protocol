@@ -13,9 +13,13 @@ import java.util.Date;
 
 public class Receiver {
 	
-	private static final int MSS = 100;
+	private static final int MSS = 576;
+	private PrintWriter writer_log;
+	String sender_IP;
+	int sender_port;
+	Socket connSock;
 	
-	public static void main(String[] args) {
+	public Receiver() {
 		BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
 		String input;
 	
@@ -28,13 +32,13 @@ public class Receiver {
 			}
 			String filename = tokens[1];
 			int listening_port = Integer.parseInt(tokens[2]);
-			String sender_IP = tokens[3];
-			int sender_port = Integer.parseInt(tokens[4]);
+			sender_IP = tokens[3];
+			sender_port = Integer.parseInt(tokens[4]);
 			String log_filename = tokens[5];
 			
 			//prepare file to write to
 			PrintWriter writer_file = new PrintWriter(filename, "UTF-8");
-			PrintWriter writer_log = new PrintWriter(log_filename, "UTF-8");
+			writer_log = new PrintWriter(log_filename, "UTF-8");
 			writer_log.write("Timestamp Src_port Dest_port Seq_num Ack_num ACK FIN Corrupted\n");
 			writer_log.flush();
 			
@@ -42,7 +46,9 @@ public class Receiver {
 			DatagramSocket rcvSock = new DatagramSocket(listening_port);
 			System.out.println("Start listening from port " + listening_port);
 			ServerSocket sock = new ServerSocket(sender_port);
-			Socket connSock = sock.accept();
+			connSock = sock.accept();
+			dbg("ack sock connected");
+			
 			PrintWriter out = new PrintWriter(connSock.getOutputStream(), true);
 			
 			byte[] tmp = new byte[MSS + 20];
@@ -62,26 +68,33 @@ public class Receiver {
 				pkt.unpackPkt();
 				pkt.setTimestamp(timestamp);
 				pkt.setDest_port(listening_port);
-				dbg("after trim, pkt_len=" + Array.getLength(pkt.getPkt_bytes()));
-				dbg("data_len=" + String.valueOf(pkt.getData_len()));
+				dbg("rcv pkt " + pkt.getSeq_num());
 				
-//				dbg(new String(pkt.getData()));
-				//checksum check
+				if (pkt.getFin() == (byte)1) {
+					dbg("Delivery completed successfully");
+					System.exit(0);
+				}
+				
+				//corrupted pkt
 				if (pkt.checkCorrupted()) {
+					//out.println(expect);
 					pkt.initCorruptedPkt();
-					pkt.writeToLog_rcv(writer_log);
-					
+					pkt.writeToLog_rcv(writer_log);	
 					continue;
 				}
 				
-				//check seq_num
+				//checksum is correct
 				if (pkt.getSeq_num() == expect) {
+					pkt.setIn_order(true);
+					pkt.writeToLog_rcv(writer_log);
+					
 					expect++;
 					out.println(expect);
-					
+					log_ack(expect);
 					String s = new String(pkt.getData());
 					writer_file.print(s);
 					writer_file.flush();
+					continue;
 				}
 				
 				//write to log
@@ -96,6 +109,24 @@ public class Receiver {
 		
 	}
 	
+	public static void main(String[] args) {
+		Receiver rcver = new Receiver();
+	}
+	
+	private void log_ack(int ack_num) {
+		writer_log.write("SND>>> ");
+		writer_log.write(new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss:sss").format(new Date()) + " ");
+		writer_log.write(connSock.getLocalPort() + " ");
+		writer_log.write(sender_port + " ");
+		writer_log.write(ack_num + " ");
+		writer_log.write(ack_num + " ");
+		writer_log.write(1 + " ");
+		writer_log.write(0 + " ");
+		writer_log.write("\n");
+		writer_log.flush();
+
+	} 
+
 	public static void dbg(String s) {
 		System.out.println(s);
 	}

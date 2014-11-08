@@ -6,7 +6,7 @@ import java.util.Date;
 
 
 public class Packet {
-	private static final int MSS = 100;
+	private static final int MSS = 576;
 
 	private int src_port;
 	private int dest_port;
@@ -21,8 +21,22 @@ public class Packet {
 	private long rtt;
 	private byte[] data;
 	private byte[] pkt_bytes;
+	private boolean resnt = false;
+	private boolean in_order = false;
 	
 	
+	public boolean isIn_order() {
+		return in_order;
+	}
+	public void setIn_order(boolean in_order) {
+		this.in_order = in_order;
+	}
+	public boolean isResnt() {
+		return resnt;
+	}
+	public void setResnt(boolean resnt) {
+		this.resnt = resnt;
+	}
 	public void setDest_port(int port) {
 		dest_port = port;
 	}
@@ -233,6 +247,7 @@ public class Packet {
 	
 	public void writeToLog_snd(PrintWriter writer) {
 		//timestamp, source, destination, Sequence #, ACK #, and the flags
+		writer.write("SND>>> ");
 		writer.write(new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss:sss").format(timestamp) + " ");
 		writer.write(src_port + " ");
 		writer.write(dest_port + " ");
@@ -240,12 +255,16 @@ public class Packet {
 		writer.write(ack_num + " ");
 		writer.write(ack + " ");
 		writer.write(fin + " ");
-		writer.write(rtt + "\n");
+		writer.write(rtt + " ");
+		if (resnt)
+			writer.write("RESEND");
+		writer.write("\n");
 		writer.flush();
 	}
 	
 	public void writeToLog_rcv(PrintWriter writer) {
 		//timestamp, source, destination, Sequence #, ACK #, and the flags
+		writer.write("RCV<<< ");
 		writer.write(new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss:sss").format(timestamp) + " ");
 		writer.write(src_port + " ");
 		writer.write(dest_port + " ");
@@ -254,9 +273,9 @@ public class Packet {
 		writer.write(ack + " ");
 		writer.write(fin + " ");
 		if (corrupted)
-			writer.write("corrupted");
-		else
-			writer.write("uncorrupted");
+			writer.write("corrupted ");
+		if (!in_order)
+			writer.write("not in order ");
 		writer.write("\n");
 		writer.flush();
 	}
