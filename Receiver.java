@@ -18,6 +18,7 @@ public class Receiver {
 	String sender_IP;
 	int sender_port;
 	Socket connSock;
+	Date startTime;
 	
 	public Receiver() {
 		BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
@@ -39,7 +40,7 @@ public class Receiver {
 			//prepare file to write to
 			PrintWriter writer_file = new PrintWriter(filename, "UTF-8");
 			writer_log = new PrintWriter(log_filename, "UTF-8");
-			writer_log.write("Timestamp Src_port Dest_port Seq_num Ack_num ACK FIN Corrupted\n");
+			writer_log.write("Timestamp Src_port Dest_port Seq# Ack# ACK FIN Other\n");
 			writer_log.flush();
 			
 			//create sockets
@@ -47,7 +48,6 @@ public class Receiver {
 			System.out.println("Start listening from port " + listening_port);
 			ServerSocket sock = new ServerSocket(sender_port);
 			connSock = sock.accept();
-			dbg("ack sock connected");
 			
 			PrintWriter out = new PrintWriter(connSock.getOutputStream(), true);
 			
@@ -57,10 +57,11 @@ public class Receiver {
 			int expect = 0;
 			while(true) {
 				rcvSock.receive(pkt_rcvd);
+				if (expect == 0)
+					startTime = new Date();
 //				String timestamp = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss:sss").format(new Date());
 				Date timestamp = new Date();
 				
-				System.out.println("Received from port " + pkt_rcvd.getPort());
 				byte[] pkt_bytes = pkt_rcvd.getData();
 				
 				Packet pkt = new Packet();
@@ -68,10 +69,11 @@ public class Receiver {
 				pkt.unpackPkt();
 				pkt.setTimestamp(timestamp);
 				pkt.setDest_port(listening_port);
-				dbg("rcv pkt " + pkt.getSeq_num());
 				
 				if (pkt.getFin() == (byte)1) {
 					dbg("Delivery completed successfully");
+					long diff = new Date().getTime() - startTime.getTime();
+					dbg("Total time used: " + diff + " ms");
 					System.exit(0);
 				}
 				
@@ -87,7 +89,7 @@ public class Receiver {
 				if (pkt.getSeq_num() == expect) {
 					pkt.setIn_order(true);
 					pkt.writeToLog_rcv(writer_log);
-					
+					System.out.print("Packets received: " + expect + "\r");
 					expect++;
 					out.println(expect);
 					log_ack(expect);

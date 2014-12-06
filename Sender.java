@@ -89,6 +89,7 @@ public class Sender {
 		if (last_pkt_len > 0)
 			num_pkt++;
 		
+		Date startTime = new Date();
 		seq_num = 0;
 		synchronized(baseLock) {
 			while (base < num_pkt) {
@@ -108,6 +109,7 @@ public class Sender {
 				baseLock.wait();
 			}
 		}
+		long diff = new Date().getTime() - startTime.getTime();
 		
 		byte[] data;	
 		data = new byte[1];
@@ -117,6 +119,7 @@ public class Sender {
 		dbg("Total bytes sent = " + String.valueOf(Array.getLength(fileContent) + 20*num_pkt));
 		dbg("Segments sent = " + count);
 		dbg("Segments retransmitted = " + String.valueOf(count-num_pkt));
+		dbg("Total time used: " + diff + " ms");
 	}
 	
 	private Packet makePkt(int num, byte[] data, byte fin) throws IOException {

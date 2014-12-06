@@ -1,0 +1,50 @@
+There are 3 java files: Receiver.java, Sender.java, Packet.java
+The parameters needed to invoke the 2 programs are the same with homework requirements.
+
+------------------------------------
+Steps to run the program:
+
+IMPORTANT: The UDP port of the sender is hard-coded as 9999
+
+(In 1st terminal)
+$./newudpl -o localhost:4119 -i localhost:9999 -p 5000:6000 -L 10 -B 10 -O 10
+
+(In 2nd terminal)
+$make
+$java Receiver
+receiver file_rcv.txt 4119 127.0.0.1 20001 log_rcv.txt
+
+(In 3rd terminal)
+$java Sender
+sender file_snd.txt 127.0.0.1 5000 20001 log_snd.txt 10
+
+------------------------------------
+
+Sender sends the file to receiver by UDP, while receiver sends back ACK by TCP. 
+
+All the pakets sent from sender or reciever will be recorded in a relative log file. 
+The fields in receiver's log are "Timestamp Src_port Dest_port Seq# Ack# ACK FIN Other", in wich ACK and FIN are 2 flags, and Other indicates if the file received is corrupted or not in order. On the other hand, the fields in sender's log contains "Timestamp Src_port Dest_port Seq# Ack# ACK FIN eRTT", in which eRTT indicates the estimated RTT.
+
+In receiver program, if the specified log filename is "stdout", the log will be printed in terminal.
+
+After sender finishes transmitting the file, it sends a pkt with FIN=1, then it exits. Upon receiving this packet, receiver prints that the delivery was successful, and then exits.
+
+In sender program, variable window_size parameter is supported, and its default value is 1.
+
+Sequence numbers start from zero, but in my implementation, seq num is used to indicate packets, not bytes.
+
+Retransmission time is calculated as per the TCP standard. The initial value of estimated RTT is 40 ms. When calculating the timeout interval, I only take into account the packets whose ACK comes when it is sent only once.
+
+The TCP header is 20-byte long, but its fields and the length of each field are different from TCP standard.
+
+On recerver side, when a received packet is corrupted, all its fields in TCP header are recorded in the log file as -1.
+
+The TCP checksum is computed over both header and data.
+
+Maximum segment size is 576
+
+-------------------------------------
+Extra features:
+progress bar
+variable window size
+Indicating number of packets received, and total time used in both sender and receiver ui

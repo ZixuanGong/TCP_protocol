@@ -281,6 +281,8 @@ public class Packet {
 	}
 	
 	public void initCorruptedPkt() {
+		src_port = -1;
+		dest_port = -1;
 		seq_num = -1;
 		ack_num = -1;
 		ack = (byte) -1;
